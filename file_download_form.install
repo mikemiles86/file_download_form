@@ -1,0 +1,85 @@
+<?php
+// $Id$
+
+  /**
+   * Implementation of hook_install().
+   */ 
+  function file_download_form_install(){
+	drupal_install_schema('file_download_form');
+  }
+
+  /**
+   * Implementation of hook_uninstall().
+   */
+  function file_download_form_uninstall() {
+    drupal_uninstall_schema('file_download_form');
+  }
+
+  /**
+   * Implementation of hook_schema().
+   */
+  function file_download_form_schema(){
+    $schema = array();
+    
+	$schema['file_download_form_fields'] = array(
+		'fields'	=> array(
+			'fdf_id'		=> array(
+				'type' 		=> 'serial',
+				'unsigned' 	=> TRUE,
+				'not null' 	=> TRUE,
+			),
+			'node_id' => array(
+				'type' => 'int',
+				'unsigned' => TRUE,
+				'not null' => TRUE,
+				'default'  => 0,
+			),
+			'field_name' => array(
+				'type'		=> 'text',
+				'not null' 	=> TRUE,
+			),
+			'filepath'	=> array(
+				'type'		=> 'text',
+				'not null'	=> TRUE,
+			),
+			'field_key'  => array(
+				'type'		=> 'text',
+				'not null'	=> TRUE,
+			),
+		),
+		'indexes' => array('fdf_id' => array('fdf_id')),
+		'primary_key' => array('fdf_id'),	
+	);
+	
+	$schema['file_download_form_downloads'] = array(
+		'fields'	=> array(
+			'fdfd_id'	=> array(
+				'type' 		=> 'serial',
+				'unsigned' 	=> TRUE,
+				'not null' 	=> TRUE,
+			),
+			'filepath'	=> array(
+				'type'		=> 'text',
+				'not null'	=> TRUE,
+			),
+			'email'		=> array(
+				'type'		=> 'text',
+				'not null' 	=> TRUE,
+			),
+			'last_download'	=> array(
+				'type'		=> 'datetime',
+				'not null'	=> TRUE,
+			),
+			'download_count'=> array(
+				'type' => 'int',
+				'unsigned' => TRUE,
+				'not null' => TRUE,
+				'default'  => 1,
+			),
+		),
+		'indexes' => array('fdfd_id' => array('fdfd_id')),
+		'primary_key' => array('fdfd_id'),	
+	);
+	
+    return $schema;
+  } 
