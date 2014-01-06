@@ -1,0 +1,575 @@
+<?php
+
+  /**
+   *Implementation of hook_perm().
+   **/
+  function file_download_form_perm(){
+    return array('administer file downloads');
+  }
+
+  /**
+   * Implements hook_access()
+   */
+  function file_download_form_access($op){
+    return user_access($op);
+  }
+
+  function file_download_form_init(){
+    // - retrieve all file paths & keys, id
+    if($entries = file_download_form_getEntries()){
+    // - build js that will
+    //    - find <a's with file_path
+    //    - replace href with path 'file-download/form/%fdf_id
+    //    - add class to link, to call popup form
+      $build_js = file_download_form_buildJS($entries);
+      drupal_add_js($build_js,'inline','header',false,false);
+    }
+  }
+
+   function file_download_form_menu(){
+    //Admin
+    $items['admin/content/file-download'] = array(
+      'title'       => 'File downloads',
+      'description'     => 'View who has been downloading files',
+      'page callback'   => 'file_download_form_admin_overview',
+      'access arguments'  => array('administer file downloads'),
+      'file'        => 'file_download_form.admin.inc',
+    );
+
+    //Default list view
+    $items['admin/content/file-download/list-email'] = array(
+      'title' => 'list by Email',
+      'weight'=> 0,
+      'type'  => MENU_DEFAULT_LOCAL_TASK,
+    );
+
+    //List by file (alt view)
+    $items['admin/content/file-download/list-file'] = array(
+      'title'       => 'list By File',
+      'description'     => 'View who has been downloading files',
+      'page callback'   => 'file_download_form_admin_overview_alt',
+      'access arguments'  => array('administer file downloads'),
+      'type'        => MENU_LOCAL_TASK,
+      'weight'      => 1,
+      'file'        => 'file_download_form.admin.inc',
+    );
+
+    //export by e-mail
+    $items['admin/content/file-download/export-email'] = array(
+      'title'       => 'Export by Email',
+      'description'     => 'Export table of downloads',
+      'page callback'   => 'file_download_form_admin_export',
+      'access arguments'  => array('administer file downloads'),
+      'type'        => MENU_LOCAL_TASK,
+      'weight'      => 2,
+      'parent'      => 'admin/content/file-download',
+      'file'        => 'file_download_form.admin.inc',
+    );
+
+    //export by file (alt export)
+    $items['admin/content/file-download/export-file'] = array(
+      'title'       => 'Export by File',
+      'description'     => 'Export table of downloads',
+      'page callback'   => 'file_download_form_admin_export_alt',
+      'access arguments'  => array('administer file downloads'),
+      'type'        => MENU_LOCAL_TASK,
+      'weight'      => 3,
+      'parent'      => 'admin/content/file-download',
+      'file'        => 'file_download_form.admin.inc',
+    );
+
+
+    //Other menu items
+    //e-mail form to allow download
+    $items['file-download/form/%file_download_form_entry'] = array(
+      'title'       => 'Download File Form',
+      'page callback'   => 'file_download_form_requestForm',
+      'page arguments'  => array(2),
+      'access arguments'  => array('access content'),
+      'type'        => MENU_CALLBACK,
+    );
+
+    //file link to download file
+    $items['file-download/file/%file_download_form_entry'] = array(
+      'title'       => 'File download',
+      'page callback'   => 'file_download_form_downloadFile',
+      'page arguments'  => array(2),
+      'access arguments'  => array('access content'),
+      'type'        => MENU_CALLBACK,
+    );
+
+    //display thanks page
+    $items['file-download/thanks'] = array(
+      'title'       => 'Thank You',
+      'description'     => "Thank You",
+      'page callback'   => 'file_download_form_thank_you_page',
+      'access arguments'  => array('access content'),
+      'type'        => MENU_CALLBACK,
+    );
+
+    return $items;
+  }
+
+  /**
+   * Impelmentation of hook_theme().
+   */
+  function file_download_form_theme($existing, $type, $theme, $path) {
+    $path = drupal_get_path('module', 'file_download_form') . '/theme';
+    return array(
+      'file_download_form_thank_you' => array(
+        'template' => 'fdf-thank-you',
+        'path' => $path,
+      ),
+    );
+  }
+
+  //Add's check box to node forms, to select if file needs e-mail form to be downloaded
+  function file_download_form_form_alter(&$form, $form_state, $form_id){
+    //If form is for creating/editing a node
+    if (isset($form['#id']) && ($form['#id'] == 'node-form') && arg(0) == 'node'){
+      //find the file fields in the form
+      if($file_fields = file_download_form_findFileFields($form)){
+        //since node has download fields, let see if they have been set in the db
+        if($form['#node']->nid && is_numeric($form['#node']->nid)){
+          //see if field has already been registered as a form download feild.
+          if($node_fields = file_download_form_getEntries($form['#node']->nid)){
+            $temp = array();
+            foreach($node_fields as $nf){
+              $temp[] = $nf['field_name'];
+            }
+            $node_fields = $temp;
+            unset($temp);
+          }
+        }
+
+        if(!$node_fields || !is_array($node_fields)) $node_fields = array();
+
+        //Add new field to form
+        $form['fileDownloadForm'] = array(
+          '#type'     => 'fieldset',
+          '#title'    => t('Requires Download Form'),
+          '#description'  => t('Check which file fields require user to fill out a form to download'),
+          '#collapsible'  => TRUE,
+        );
+        $x=0;
+        //List each file field as checkbox
+        foreach($file_fields as $title => $field_name){
+          $form['fileDownloadForm']['fdf_'.$x.'_info'] = array(
+            '#type'   => 'value',
+            '#value'  => $field_name,
+          );
+          $form['fileDownloadForm']['fdf_'.$x] = array(
+            '#type'   => 'checkbox',
+            '#title'  => $title,
+            '#default_value' => (in_array($field_name,$node_fields) ? 1:0),
+          );
+          $x++;
+        }
+        $form['fileDownloadForm']['fdf_count'] = array(
+          '#type'   => 'value',
+          '#value'  => $x,
+        );
+
+        //Add custom submit function to node form
+        $form['#submit'][] = 'file_download_form_node_form_submit';
+      }
+    }
+  }
+
+  //On node form submit save preference for file feilds
+  function file_download_form_node_form_submit($form,&$form_state){
+    //get the values we need - and save for node paths
+    if(isset($form_state['values']['fdf_count'])){
+      //get node id
+      $nid = $form_state['values']['nid'];
+      //if no nodeID, then we'll use the form build id as a temp
+      if(!$nid){
+        $nid = ((int)substr(preg_replace('/[^\d]+/','',$form_state['values']['form_build_id']),0,6))+0;
+      }
+      //get count of file fields
+      $count = $form_state['values']['fdf_count'];
+      $require_form = array();
+      $not_require = array();
+      //get current node entries
+      if($node_entries = file_download_form_getEntries($nid)){
+        $temp = array();
+        foreach($node_entries as $ne) $temp[] = $ne['field_name'];
+        $node_entries = $temp;
+        unset($temp);
+      }else $node_entries = array();
+
+      for($x=0;$x<$count;$x++){
+        $field = $form_state['values']['fdf_'.$x.'_info'];
+        if($form_state['values']['fdf_'.$x] && $form_state['values']['fdf_'.$x]==1){
+          // create unique key, for field
+          if(!in_array($field,$node_entries)){
+            $require_form[] = $nid.',\''.$field.'\',\''.md5($nid.$field.rand(0,99999)).'\'';
+          }
+        }else $not_require[] = $field;
+      }
+
+      if(sizeof($not_require)>0){
+        //for any fields that do not require form, remove from DB
+        foreach($not_require as $field_name){
+          $q = 'DELETE FROM {file_download_form_fields} WHERE node_id = %d AND field_name = \'%s\'';
+          db_query($q,array($nid,$field_name));
+        }
+      }
+
+      if(sizeof($require_form)>0){
+        //foreach field that does require a form field - insert into db
+        $q = 'INSERT INTO {file_download_form_fields}(node_id,field_name,field_key) VALUES ('.implode('),(',$require_form).')';
+        db_query($q);
+      }
+    }
+  }
+
+
+
+  function file_download_form_nodeapi(&$node, $op, $arg) {
+    switch($op){
+      case 'insert':
+      case 'load':
+        //find any entries with this nodes form_build_id(a temp id), and replace with node ID
+        if($node->nid && $node->form_build_id){
+          $temp_id = ((int)substr(preg_replace('/[^\d]+/','',$node->form_build_id),0,6))+0;
+          $q = 'UPDATE {file_download_form_fields} SET node_id = %d WHERE node_id = %d';
+          db_query($q,array($node->nid,$temp_id));
+        }
+        //- update file path for fields
+        file_download_form_update_filepaths($node);
+        break;
+      case 'update':
+        //- update file path for fields
+        file_download_form_update_filepaths($node);
+        break;
+      case 'delete':
+        //delete all downloand db entries for this node
+        $q = 'DELETE FROM {file_download_form_fields} WHERE node_id = %d';
+        db_query($q,array($node->nid));
+        break;
+      case 'view':
+      //  file_download_form_init();
+        break;
+    }
+  }
+
+  function file_download_form_update_filepaths($node){
+    //we need to get the field_names for this node
+    if($entries = file_download_form_getEntries($node->nid)){
+      $file_paths = array();
+      foreach($entries as $e){
+        if($field = $node->$e['field_name']){
+          //see if can find filepath
+          if($field[0]['filepath']) $filepath = $field[0]['filepath'];
+          else $filepath = false;
+
+          if($filepath && $filepath != $e['filepath']){
+            $q = 'UPDATE {file_download_form_fields} SET filepath = \'%s\' WHERE fdf_id = %d';
+            db_query($q,array($filepath,$e['fdf_id']));
+          }
+        }
+      }
+    }
+  }
+
+  function file_download_form_buildJS($entries=false){
+    if(!$entries && !$entries = file_download_form_getEntries()) return '';
+    //build JS to replace links to the files that require a form
+    $js ='  var a,c,d,e,x;'."\n";
+    foreach($entries as $e){
+      if(strlen($e['filepath'])>0){
+        //we're going to obscure the links we are looking for from priing eyes
+        $js .= file_download_form_obscureJS($e['filepath']);
+        $js .=' $("a[href$="+d+"]").each(function(){$(this).attr(\'href\',\''.url('file-download/form/'.$e['fdf_id']).'\');});'."\n";
+      }
+    }
+    $js = 'Drupal.behaviors.fileDownloadForm=function(){'."\n".$js."\n".'};';
+    return $js;
+  }
+
+  function file_download_form_obscureJS($text){
+    //Unique base, created with characters used in the original text.
+    $base = array();
+    for($x=0;$x<strlen($text);$x++){
+      if(!in_array($text[$x],$base)) $base[] = $text[$x];
+    }
+    //flatten base
+    $base = str_shuffle(implode('',$base));
+    //create cypher of base
+    $cypher = str_shuffle($base);
+    //get text length
+    $text_length = strlen($text);
+    //prepare encrypted string
+    $encrypt = '';
+    //for each letter in text find it's cypher equivilent
+    for($x=0;$x<$text_length;$x++) $encrypt .= $cypher[strpos($base,$text[$x])];
+    $base = str_replace('\'',"\'",$base);
+    $cypher = str_replace('\'',"\'",$cypher);
+    $encrypt = str_replace('\'',"\'",$encrypt);
+    //Prepare some js code
+    $js_code  = " a='$base'; c='$cypher'; e='$encrypt'; d='';\n";
+    $js_code .= " for(x=0;x<$text_length;x++) d +=a.charAt(c.indexOf(e.charAt(x)));\n";
+    return $js_code;
+  }
+
+  function file_download_form_downloadFile($entry=false){
+    global $base_url;
+    if(!$entry['filepath']) return file_download_form_requestForm();
+    else{
+      //point user to actual file
+      //get file content-type
+      header('Content-type: '.file_download_form_mime_type($entry['filepath']));
+      header('Content-Disposition: attachment; filename="'.array_pop(explode('/',$entry['filepath'])).'"');
+      readfile(url($entry['filepath'],array('absolute'=>true)));
+    }
+  }
+
+  //get form user has to fill to request file
+  function file_download_form_requestForm($entry=false){
+    if(!$entry) $entry = array();
+    return drupal_get_form('file_download_form_form',(array)$entry);
+  }
+
+  //build request file form
+  function file_download_form_form(&$form_state,$entry = array()){
+    global $base_url;
+    $entry += array(
+      'fdf_id'  => 0,
+      'field_name'=> '',
+      'filepath'  => '',
+      'field_key' => '',
+    );
+
+    $form['fdfForm'] = array(
+      '#type'     => 'fieldset',
+      '#title'    => t('File Download'),
+      '#collapsible'  => FALSE,
+    );
+
+    //Error we're missing out entry
+    if($entry['fdf_id'] == 0){
+      $form['fdfForm']['#description'] = t('There was an error proccessing your request.');
+    }else{
+      $file = array_pop(explode('/',$entry['filepath']));
+      $form['fdfForm']['#description'] = t('To download the file "'.$file.'" please provide your email. you will be emailed a link to download the file. If you\'ve previously downloaded this file, then your download should start shortly after providing your e-mail address');
+
+      $form['fdfForm']['Email'] = array(
+        '#type'   => 'textfield',
+        '#title'  => t('Email Address'),
+        '#description' => t('your email address'),
+        '#required' => TRUE,
+      );
+
+      $form['fdfForm']['fdf_id'] = array(
+        '#type'       => 'value',
+        '#default_value'  => $entry['fdf_id'],
+      );
+
+      $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Submit')
+      );
+
+      $form['#redirect'] = 'file-download/thanks';
+      $form['#validate'][] = 'file_download_form_pathFormValidate';
+    }
+
+    return $form;
+  }
+
+  function file_download_form_pathFormValidate($form, &$form_state){
+    //make sure user provided valid e-mail
+    if(!valid_email_address($form_state['values']['Email'])){
+      form_set_Error('Email',t('Please Provide a valid E-mail address.'));
+    }
+  }
+
+  //request file form submission
+  function file_download_form_form_submit($form, &$form_state){
+    //get entry for file
+    if($entry = file_download_form_entry_load($form_state['values']['fdf_id'])){
+      //create link to file
+      $url = url('file-download/file/'.$entry['field_key'],array('absolute'=>true));
+      $email = $form_state['values']['Email'];
+      //see if user has already downloaded this file
+      if($user_download = file_download_form_user_downloads($email,$entry['filepath'])){
+        //update timestamp & count
+        $q = 'UPDATE {file_download_form_downloads} SET last_download = NOW(), download_count = %d WHERE fdfd_id = %d';
+        db_query($q,array(($user_download['download_count']+1),$user_download['fdfd_id']));
+        // send user directly to file (no need to send another e-mail)
+        file_download_form_downloadFile($entry);
+        exit;
+      }else{
+        //insert into DB
+        $q = 'INSERT INTO {file_download_form_downloads}(filepath,email,last_download,download_count) VALUES (\'%s\',\'%s\',NOW(),1)';
+        db_query($q,array($entry['filepath'],$email));
+        //e-mail user
+        drupal_mail('file_download_form','file-request',$email,'',array('url'=>$url,'file_name'=>array_pop(explode('/',$entry['filepath']))));
+      }
+    }else return file_download_form_requestForm();
+  }
+
+  //Mail user e-mail to download file
+  function file_download_form_mail($key, &$message, $params){
+    switch($key){
+      case 'file-request':
+        $message['subject'] = t('File Download Request');
+        $message['body'][] = t(" You have requested to download the file \"!file_name\". \n".
+          "You can download your file by going to this URL: \n\n !url",
+          $params);
+        break;
+    }
+  }
+
+  //display thank you page
+  function file_download_form_thank_you_page(){
+    return theme('file_download_form_thank_you');
+  }
+
+  //Get file information based on unique key
+  function file_download_form_entry_load($key){
+
+    //see which key we're using
+    if(is_numeric($key)) $entry = file_download_form_getEntries($key,'fdf_id');
+    else if(strlen($key)==32) $entry = file_download_form_getEntries($key,'field_key');
+    else $entry = false;
+    if($entry) $entry = $entry[0];
+    return $entry;
+  }
+
+  function file_download_form_getEntries($nid=false,$key=false){
+    $q = 'SELECT fdf_id,field_name, filepath, field_key FROM {file_download_form_fields}';
+    if($key){
+      $q .=' WHERE %s = \'%s\'';
+      $q = db_query($q,array($key,$nid));
+    }else if($nid && is_numeric($nid)){
+      $q .=' WHERE node_id = %d';
+      $q = db_query($q,array($nid));
+    }else $q = db_query($q);
+
+    if($q){
+      $entries = array();
+      while($e = db_fetch_array($q)) $entries[] = $e;
+    }
+
+    if(!$entries || sizeof($entries)<1 || !isset($entries[0]['fdf_id'])) return false;
+    return $entries;
+  }
+
+  //find file fields within a form
+  function file_download_form_findFileFields($form,$x=0){
+    $file_fields = array();
+    foreach($form as $name=>$element){
+      if(is_array($element)){
+        if(!isset($element['#type'])){
+          if($fields = file_download_form_findFileFields($element,($x+1))){
+            $file_fields = array_merge($file_fields,$fields);
+          }
+        }else if($element['#type'] == 'filefield' || $element['#type'] == 'filefield_widget' || $element['#type'] == 'file'){
+          if(is_numeric($name) && isset($element['#title'])) $name = $element['#title'];
+          $file_fields[$name] = $element['#field_name'];
+        }
+      }
+    }
+
+    if(sizeof($file_fields)<1) return false;
+    return $file_fields;
+  }
+
+  //find downloads based on e-mail address
+  function file_download_form_user_downloads($email=false,$filepath = false){
+    $q = 'SELECT d.* FROM {file_download_form_downloads} AS d';
+    if($email){
+      $args = array($email);
+      $q.=' WHERE d.email = \'%s\'';
+      if($filepath && strlen($filepath)>0){
+        $q .=' AND d.filepath = \'%s\'';
+        $args[] = $fdf_id;
+      }
+      $q = db_query($q,$args);
+    }else $q = db_query($q);
+
+    if($q){
+      $entries = array();
+      while($e = db_fetch_array($q)){
+        $entries[] = $e;
+      }
+      if(sizeof($entries)>0) return $filepath ? $entries[0]:$entries;
+    }
+    return false;
+  }
+
+  //Mime types
+   function file_download_form_mime_type($filename) {
+
+        $mime_types = array(
+
+            'txt' => 'text/plain',
+            'htm' => 'text/html',
+            'html' => 'text/html',
+            'php' => 'text/html',
+            'css' => 'text/css',
+            'js' => 'application/javascript',
+            'json' => 'application/json',
+            'xml' => 'application/xml',
+            'swf' => 'application/x-shockwave-flash',
+            'flv' => 'video/x-flv',
+
+            // images
+            'png' => 'image/png',
+            'jpe' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'jpg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'bmp' => 'image/bmp',
+            'ico' => 'image/vnd.microsoft.icon',
+            'tiff' => 'image/tiff',
+            'tif' => 'image/tiff',
+            'svg' => 'image/svg+xml',
+            'svgz' => 'image/svg+xml',
+
+            // archives
+            'zip' => 'application/zip',
+            'rar' => 'application/x-rar-compressed',
+            'exe' => 'application/x-msdownload',
+            'msi' => 'application/x-msdownload',
+            'cab' => 'application/vnd.ms-cab-compressed',
+
+            // audio/video
+            'mp3' => 'audio/mpeg',
+            'qt' => 'video/quicktime',
+            'mov' => 'video/quicktime',
+
+            // adobe
+            'pdf' => 'application/pdf',
+            'psd' => 'image/vnd.adobe.photoshop',
+            'ai' => 'application/postscript',
+            'eps' => 'application/postscript',
+            'ps' => 'application/postscript',
+
+            // ms office
+            'doc' => 'application/msword',
+            'rtf' => 'application/rtf',
+            'xls' => 'application/vnd.ms-excel',
+            'ppt' => 'application/vnd.ms-powerpoint',
+
+            // open office
+            'odt' => 'application/vnd.oasis.opendocument.text',
+            'ods' => 'application/vnd.oasis.opendocument.spreadsheet',
+        );
+
+        $ext = strtolower(array_pop(explode('.',$filename)));
+        if (array_key_exists($ext, $mime_types)) {
+            return $mime_types[$ext];
+        }
+        elseif (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME);
+            $mimetype = finfo_file($finfo, $filename);
+            finfo_close($finfo);
+            return $mimetype;
+        }
+        else {
+            return 'application/octet-stream';
+        }
+    }

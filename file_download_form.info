@@ -1,10 +1,7 @@
-; $Id$
-
-name = "File Download Form"
-description = "Module allows admin to select files that a user has to fill out a form in order to download"
-core = 6.x
+ame = "File Download Form"
+description = "Allows files attached to entities to be downloaded after user fills out a form."
+core = 7.x
 php = 5.x
 package = Other
-version = "6.x-0.0.3"
 
-dependencies[] = filefield
+dependencies[] = cck
