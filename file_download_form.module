@@ -16,3 +16,61 @@
  * - drupal standards
  * - support either sending user an email or direct redirect to file.
  */
+
+/**
+ * Implements hook_field_formatter_info_alter().
+ */
+function file_download_form_field_formatter_info_alter(&$info) {
+  $info['file_download_form'] = array(
+    'label'       => t('File Download Form'),
+    'field types' => array('file'),
+    'module'      => 'file_download_form',
+    'settings'    => array(
+      'form_type' => '',
+      'form_settings' => '',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function file_download_form_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  $display  = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $element  = array();
+
+  $element['form_type'] = array(
+    '#type'   => 'radio',
+    '#title'  => t('Form Type'),
+    '#description'  => t('Select what type of form you would like to use as the file download form.'),
+    '#options'  => array(
+      'file_download_form' => t('File Download Form'),
+    ),
+    '#required' => TRUE,
+  );
+
+  $element['file_download_form'] = array(
+    '#type'   => 'fieldset',
+    '#title'  => t('File Download Form'),
+    '#states'       => array(
+      'invisible' => array(
+        ':input[name=form_type]' => array('value' => 'file_download_form'),
+    ),
+  );
+
+  $element['file_download_form']['obscure_file'] = array(
+    '#type'   => 'checkbox',
+    '#title'  => t('Obscure File path'),
+    '#description' => t('Obscure the file download path with a hashed url.'),
+    '#default_value'  => $settings['obscure_file'],
+  );
+
+  $element['file_download_form']['email_file'] = array(
+    '#type'   => 'checkbox',
+    '#title'  => t('Email File'),
+    '#description'  => t('Email the file path to the user after they have completed the form.'),
+    '#default_value' => $settings['email_file'],
+  );
+}
+
