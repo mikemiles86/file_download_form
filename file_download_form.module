@@ -12,7 +12,7 @@
  * - allow admin to select node to redirect to for thankyou page
  * - allow admin to add fields to custom form (use entityform?)
  * - allow admin to be emailed when users download certian files
- * - improve obcufusion of fle paths
+ * - improve obscuration of fle paths
  * - drupal standards
  * - support either sending user an email or direct redirect to file.
  */
@@ -56,6 +56,7 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
     '#states'       => array(
       'invisible' => array(
         ':input[name=form_type]' => array('value' => 'file_download_form'),
+      ),
     ),
   );
 
@@ -69,8 +70,40 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
   $element['file_download_form']['email_file'] = array(
     '#type'   => 'checkbox',
     '#title'  => t('Email File'),
-    '#description'  => t('Email the file path to the user after they have completed the form.'),
+    '#description'  => t('Email the file path to the user after they have completed the form. LEave this unchecked to allow users to immediately download the file.'),
     '#default_value' => $settings['email_file'],
   );
 }
 
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function file_download_form_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $summary = '';
+
+
+  if ($display['type'] == 'file_download_form') {
+    $summary = t('Display a form that the user has to fill out to be able to download the file.');
+  }
+
+  return $summary;
+}
+
+
+/**
+ * Implements hook_formatter_view().
+ */
+function file_download_form_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element      = array();
+  $settings     = $display['settings'];
+
+  if ($display['type'] == 'file_download_form') {
+    foreach ($items as $delta => $item) {
+      $element[$delta] = array('#markup' => l('Download File','http://www.google.com'));
+    }
+  }
+
+  return $element;
+}

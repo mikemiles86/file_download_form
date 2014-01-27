@@ -4,4 +4,6 @@ core = 7.x
 php = 5.x
 package = Other
 
-dependencies[] = cck
+dependencies[] = file
+
+files[] = file_download_form.module
