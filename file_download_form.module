@@ -7,7 +7,7 @@
 /**
  * @TODOs for Drupal7
  * - integrate with cck filefield
- * 		- display widget?
+ *    - display widget?
  * - support multiple files per entity
  * - allow admin to select node to redirect to for thankyou page
  * - allow admin to add fields to custom form (use entityform?)
@@ -41,7 +41,7 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
   $element  = array();
 
   $element['form_type'] = array(
-    '#type'   => 'radio',
+    '#type'   => 'radios',
     '#title'  => t('Form Type'),
     '#description'  => t('Select what type of form you would like to use as the file download form.'),
     '#options'  => array(
@@ -50,11 +50,18 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
     '#required' => TRUE,
   );
 
+  if (isset($settings['form_type'])) {
+    $element['form_type']['#default_value'] = $settings['form_type'];
+  }
+
+//@TODO: states is not working correctly.
   $element['file_download_form'] = array(
     '#type'   => 'fieldset',
+    '#collapsible' => TRUE,
     '#title'  => t('File Download Form'),
-    '#states'       => array(
-      'invisible' => array(
+    '#description' => $field_selector,
+    '#states' => array(
+      'visible' => array(
         ':input[name=form_type]' => array('value' => 'file_download_form'),
       ),
     ),
@@ -64,16 +71,26 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
     '#type'   => 'checkbox',
     '#title'  => t('Obscure File path'),
     '#description' => t('Obscure the file download path with a hashed url.'),
-    '#default_value'  => $settings['obscure_file'],
   );
+
+  if (isset($settings['file_download_form']['obscure_file'])) {
+    $element['file_download_form']['obscure_file']['#default_value'] = $settings['file_download_form']['obscure_file'];
+  }
 
   $element['file_download_form']['email_file'] = array(
     '#type'   => 'checkbox',
     '#title'  => t('Email File'),
-    '#description'  => t('Email the file path to the user after they have completed the form. LEave this unchecked to allow users to immediately download the file.'),
-    '#default_value' => $settings['email_file'],
+    '#description'  => t('Email the file path to the user after they have completed the form. Leave this unchecked to allow users to immediately download the file.'),
   );
+
+  if (isset($settings['file_download_form']['email_file'])) {
+    $element['file_download_form']['email_file']['#default_value'] = $settings['file_download_form']['email_file'];
+  }
+
+  return $element;
 }
+
+//@TODO: form settings are not saving.
 
 /**
  * Implements hook_field_formatter_settings_summary().
