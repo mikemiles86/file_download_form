@@ -25,9 +25,13 @@ function file_download_form_field_formatter_info_alter(&$info) {
     'label'       => t('File Download Form'),
     'field types' => array('file'),
     'module'      => 'file_download_form',
+    //@TODO: make dynamic to allow for plugins.
     'settings'    => array(
       'form_type' => '',
-      'form_settings' => '',
+      'file_download_form' => array(
+        'obscure_file' => 0,
+        'email_file'  => 0,
+      ),
     ),
   );
 }
@@ -54,10 +58,11 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
     $element['form_type']['#default_value'] = $settings['form_type'];
   }
 
-//@TODO: states is not working correctly.
+  //@TODO: make dynamic to allow for plugins
   $element['file_download_form'] = array(
     '#type'   => 'fieldset',
     '#collapsible' => TRUE,
+    '#tree'    => TRUE,
     '#title'  => t('File Download Form'),
     '#description' => $field_selector,
     '#states' => array(
@@ -90,7 +95,6 @@ function file_download_form_field_formatter_settings_form($field, $instance, $vi
   return $element;
 }
 
-//@TODO: form settings are not saving.
 
 /**
  * Implements hook_field_formatter_settings_summary().
@@ -118,7 +122,14 @@ function file_download_form_field_formatter_view($entity_type, $entity, $field, 
 
   if ($display['type'] == 'file_download_form') {
     foreach ($items as $delta => $item) {
-      $element[$delta] = array('#markup' => l('Download File','http://www.google.com'));
+      $file_url = file_create_url($item['uri']);
+      if ($settings['file_download_form']['obscure_file']) {
+        //$file_url = _file_download_form_obscure_url($file_url);
+      }
+      if ($settings['file_download_form']['email_file']) {
+        //present for for emailing file?
+      }
+      $element[$delta] = array('#markup' => l('Download File',file_create_url($item['uri'])));
     }
   }
 
